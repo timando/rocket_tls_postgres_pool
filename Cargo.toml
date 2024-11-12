@@ -1,0 +1,24 @@
+[package]
+name = "rocket_tls_postgres_pool"
+version = "0.1.0"
+edition = "2021"
+authors = ["Tim Anderson <crates@timando.net>"]
+description = "Postgres TLS support for Rocket database pool"
+repository = "https://github.com/timando/rocket_tls_postgres_pool"
+license = "MIT OR Apache-2.0"
+keywords = ["rocket", "framework", "database", "pools"]
+
+[dependencies.rocket]
+version = "0.5"
+default-features = false
+
+[dependencies.rocket_db_pools]
+version = ">=0.1.0, <0.3"
+default-features = false
+features = ["deadpool_postgres"]
+
+[dependencies.tokio-postgres-rustls]
+version = "0.13"
+
+[dependencies.rustls]
+version = "0.23"
