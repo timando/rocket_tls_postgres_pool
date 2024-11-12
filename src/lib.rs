@@ -12,6 +12,7 @@ use rustls::client::verify_server_cert_signed_by_trust_anchor;
 use rustls::server::ParsedCertificate;
 use rustls::{DigitallySignedStruct, SignatureScheme, RootCertStore};
 use std::sync::Arc;
+use std::path::PathBuf;
 
 #[derive(Deserialize, Copy, Clone)]
 #[serde(crate = "rocket::serde")]
@@ -101,27 +102,23 @@ impl danger::ServerCertVerifier for CaVerification {
     }
 }
 
-
-///A pool which supports separate read-write and read-only connections.
-///Example:
-///```rust
-/// # #[cfg(feature = "sqlx_sqlite")] mod _inner {
-/// # use rocket::get;
-/// # type Pool = rocket_db_pools::sqlx::SqlitePool;
-/// use rocket_db_pools::Database;
-/// use rocket_read_db_pools::ReadPool;
+///A pool which supports TLS for postgres connections
+///Due to the way the config system works, there's a separate sslmode config variable.
+///The sslmode in the connection url has three modes: disable, prefer, require.
+///The verification level has three modes: no-verify, verify-ca, verify-full.
+///The root CA can be provided either as the ca config parameter or in ~/.postgresql/root.crt
 ///
-/// #[derive(Database)]
-/// #[database("db")]
-/// struct Db(ReadPool<Pool>);
-/// # }
-///```
+///Not yet implemented:
+///- Client Certificates
+///- CRL checking
+///- `system` root-ca
+///
+///Example:
 ///```toml
 ///[default.databases.main]
-///url = "postgresql://user@host.example/dbname"
-///[default.databases.main.read]
-///url = "postgresql://user@readreplica.example/dbname"
-///max_connections = 10
+///url = "postgresql://user@host.example/dbname?sslmode=require"
+///verify-mode = "verify-ca"
+///root-ca = "./postgres-ca.pem"
 ///```
 pub struct TlsPool(deadpool_postgres::Pool);
 
@@ -134,12 +131,23 @@ impl rocket_db_pools::Pool for TlsPool{
     async fn init(figment: &Figment) -> Result<Self, Self::Error> {
         let config: Config = figment.extract()?;
         let verify_mode: VerifyMode = figment.extract_inner("verify-mode")?;//.unwrap_or(VerifyMode::NoVerify);
-        let ca: Option<String> = figment.extract_inner("ca")?;
+        let ca: Option<String> = figment.extract_inner("root-ca")?;
         let mut roots = RootCertStore::empty();
-        if let Some(ca) = ca {
-            let file = tokio::fs::read(&ca).await.unwrap(); //TODO: better error handling
-            roots.add(CertificateDer::from_slice(&file)).unwrap(); //TODO: better error handling
-        };
+        match ca {
+            Some(ca) => {
+                let data = tokio::fs::read(&ca).await.unwrap(); //TODO: better error handling
+                roots.add(CertificateDer::from_slice(&data)).unwrap(); //TODO: better error handling
+            }
+            None => {
+                //Get the home directory but default to /var/lib/pgsql which is mentioned as a common location for postgres installation
+                #[allow(deprecated)]
+                let mut filename = std::env::home_dir().unwrap_or_else(||PathBuf::from("/var/lib/pgsql"));
+                filename.push(".postgresql/root.crt");
+                if let Ok(data) = tokio::fs::read(&filename).await{
+                    roots.add(CertificateDer::from_slice(&data)).unwrap() //TODO: error handling
+                }
+            }
+        }
         let tls_config: rustls::ClientConfig = match verify_mode{
             VerifyMode::VerifyFull => {
                 rustls::ClientConfig::builder()
