@@ -52,7 +52,7 @@ impl danger::ServerCertVerifier for NoVerification {
     ) -> Result<danger::HandshakeSignatureValid, rustls::Error> {
         Ok(danger::HandshakeSignatureValid::assertion())
     }
-    fn supported_verify_schemes(&self) -> Vec<SignatureScheme> { Vec::new() }
+    fn supported_verify_schemes(&self) -> Vec<SignatureScheme> { CryptoProvider::get_default().unwrap().signature_verification_algorithms.supported_schemes() }
 }
 #[derive(Debug)]
 struct CaVerification(WebPkiSupportedAlgorithms, Arc<RootCertStore>);
@@ -105,7 +105,7 @@ impl danger::ServerCertVerifier for CaVerification {
 ///A pool which supports TLS for postgres connections
 ///Due to the way the config system works, there's a separate sslmode config variable.
 ///The sslmode in the connection url has three modes: disable, prefer, require.
-///The verification level has three modes: no-verify, verify-ca, verify-full.
+///The verification level has three modes: no-verify (default), verify-ca, verify-full.
 ///The root CA can be provided either as the ca config parameter or in ~/.postgresql/root.crt
 ///
 ///Not yet implemented:
@@ -130,13 +130,15 @@ impl rocket_db_pools::Pool for TlsPool{
 
     async fn init(figment: &Figment) -> Result<Self, Self::Error> {
         let config: Config = figment.extract()?;
-        let verify_mode: VerifyMode = figment.extract_inner("verify-mode")?;//.unwrap_or(VerifyMode::NoVerify);
-        let ca: Option<String> = figment.extract_inner("root-ca")?;
+        let verify_mode: VerifyMode = figment.extract_inner("verify-mode").or_else(|e|if e.missing(){Ok(VerifyMode::NoVerify)} else {Err(e)})?;
+        let ca: Option<String> = figment.extract_inner("root-ca").ok();
         let mut roots = RootCertStore::empty();
         match ca {
             Some(ca) => {
                 let data = tokio::fs::read(&ca).await.unwrap(); //TODO: better error handling
-                roots.add(CertificateDer::from_slice(&data)).unwrap(); //TODO: better error handling
+                for cert in rustls_pemfile::certs(&mut &*data) {
+                    roots.add(cert.unwrap()).unwrap(); //TODO: better error handling
+                }
             }
             None => {
                 //Get the home directory but default to /var/lib/pgsql which is mentioned as a common location for postgres installation
@@ -144,7 +146,9 @@ impl rocket_db_pools::Pool for TlsPool{
                 let mut filename = std::env::home_dir().unwrap_or_else(||PathBuf::from("/var/lib/pgsql"));
                 filename.push(".postgresql/root.crt");
                 if let Ok(data) = tokio::fs::read(&filename).await{
-                    roots.add(CertificateDer::from_slice(&data)).unwrap() //TODO: error handling
+                    for cert in rustls_pemfile::certs(&mut &*data) {
+                        roots.add(cert.unwrap()).unwrap(); //TODO: better error handling
+                    }
                 }
             }
         }
@@ -168,7 +172,7 @@ impl rocket_db_pools::Pool for TlsPool{
             }
         };
         let tls = tokio_postgres_rustls::MakeRustlsConnect::new(tls_config);
-        let manager = Manager::new(config.url.parse().map_err(|e|Error::Init(PoolError::Backend(e)))?, tls);
+        let manager = Manager::new(dbg!(config.url.parse()).map_err(|e|Error::Init(PoolError::Backend(e)))?, tls);
 
         Ok(Self(deadpool_postgres::Pool::builder(manager)
             .max_size(config.max_connections)

@@ -22,3 +22,6 @@ version = "0.13"
 
 [dependencies.rustls]
 version = "0.23"
+
+[dependencies.rustls-pemfile]
+version = "2"
