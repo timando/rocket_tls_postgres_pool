@@ -163,7 +163,7 @@ impl rocket_db_pools::Pool for TlsPool{
             }
         };
         let tls = tokio_postgres_rustls::MakeRustlsConnect::new(tls_config);
-        let manager = Manager::new(dbg!(config.url.parse()).map_err(|e|Error::Init(PoolError::Backend(e)))?, tls);
+        let manager = Manager::new(config.url.parse().map_err(|e|Error::Init(PoolError::Backend(e)))?, tls);
 
         Ok(Self(deadpool_postgres::Pool::builder(manager)
             .max_size(config.max_connections)
