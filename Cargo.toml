@@ -1,6 +1,6 @@
 [package]
 name = "rocket_tls_postgres_pool"
-version = "0.1.1"
+version = "0.1.2"
 edition = "2021"
 authors = ["Tim Anderson <crates@timando.net>"]
 description = "Postgres TLS support for Rocket database pool"
@@ -32,10 +32,13 @@ default-features = false
 [dependencies.tokio-postgres-rustls]
 version = "0.13"
 optional = true
+default-features = false
 
 [dependencies.rustls]
 version = "0.23"
 optional = true
+features = ["ring"]
+default-features = false
 
 [dependencies.rustls-pemfile]
 version = "2"

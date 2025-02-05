@@ -11,9 +11,10 @@ enum VerifyMode{
 
 #[cfg(feature="rustls")]
 mod rustls;
-
 #[cfg(feature="rustls")]
 pub use rustls::TlsPool as RustlsPool;
+#[cfg(feature="rustls")]
+pub use ::rustls::crypto::{ring::default_provider, CryptoProvider};
 
 #[cfg(feature="native-tls")]
 mod native_tls;

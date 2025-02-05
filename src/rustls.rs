@@ -7,7 +7,7 @@ use std::time::Duration;
 use std::sync::Arc;
 use std::path::PathBuf;
 use rustls::pki_types::{CertificateDer, ServerName, UnixTime};
-use rustls::crypto::{CryptoProvider, verify_tls12_signature, verify_tls13_signature, WebPkiSupportedAlgorithms};
+use rustls::crypto::{CryptoProvider,verify_tls12_signature, verify_tls13_signature, WebPkiSupportedAlgorithms};
 use rustls::client::danger;
 use rustls::client::verify_server_cert_signed_by_trust_anchor;
 use rustls::server::ParsedCertificate;
