@@ -25,6 +25,10 @@ version = ">=0.1.0, <0.3"
 default-features = false
 features = ["deadpool_postgres"]
 
+[dependencies.tokio-postgres]
+version = "0.7"
+default-features = false
+
 [dependencies.tokio-postgres-rustls]
 version = "0.13"
 optional = true

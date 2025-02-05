@@ -12,6 +12,10 @@ use rustls::client::danger;
 use rustls::client::verify_server_cert_signed_by_trust_anchor;
 use rustls::server::ParsedCertificate;
 use rustls::{DigitallySignedStruct, SignatureScheme, RootCertStore};
+use tokio_postgres_rustls::{MakeRustlsConnect};
+use tokio_postgres::tls::MakeTlsConnect;
+use tokio::io::{AsyncRead, AsyncWrite};
+use rustls::ClientConfig;
 use crate::VerifyMode;
 
 #[derive(Debug)]
@@ -93,6 +97,26 @@ impl danger::ServerCertVerifier for CaVerification {
     }
 }
 
+#[derive(Clone)]
+struct TlsConnector(tokio_postgres_rustls::MakeRustlsConnect);
+impl TlsConnector{
+    fn new(config: ClientConfig) -> Self{
+        Self(tokio_postgres_rustls::MakeRustlsConnect::new(config))
+    }
+}
+impl<S> MakeTlsConnect<S> for TlsConnector
+where
+    S: AsyncRead + AsyncWrite + Unpin + Send + 'static,
+{
+    type Stream = <MakeRustlsConnect as MakeTlsConnect<S>>::Stream;
+    type TlsConnect = <MakeRustlsConnect as MakeTlsConnect<S>>::TlsConnect;
+    type Error = rustls::pki_types::InvalidDnsNameError;
+
+    fn make_tls_connect(&mut self, mut hostname: &str) -> Result<Self::TlsConnect, Self::Error> {
+        if hostname == "" {hostname = "localhost";} //Unix sockets don't have a hostname and rustls complains
+        <MakeRustlsConnect as MakeTlsConnect<S>>::make_tls_connect(&mut self.0, hostname)
+    }
+}
 ///A pool which supports TLS for postgres connections using rustls
 ///Due to the way the config system works, there's a separate sslmode config variable.
 ///The sslmode in the connection url has three modes: disable, prefer, require.
@@ -162,7 +186,7 @@ impl rocket_db_pools::Pool for TlsPool{
                     .with_no_client_auth()
             }
         };
-        let tls = tokio_postgres_rustls::MakeRustlsConnect::new(tls_config);
+        let tls = TlsConnector::new(tls_config);
         let manager = Manager::new(config.url.parse().map_err(|e|Error::Init(PoolError::Backend(e)))?, tls);
 
         Ok(Self(deadpool_postgres::Pool::builder(manager)
