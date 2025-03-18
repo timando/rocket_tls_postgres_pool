@@ -135,6 +135,7 @@ where
 ///verify-mode = "verify-ca"
 ///root-ca = "./postgres-ca.pem"
 ///```
+#[derive(Clone, Debug)]
 pub struct TlsPool(deadpool_postgres::Pool);
 
 #[async_trait]
